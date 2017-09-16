@@ -2,23 +2,39 @@
 #include <malloc.h>
 #include <string.h>
 
+
+#ifndef uint32_t
+#define uint32_t unsigned int
+#endif
+#define byte unsigned char
 #define debug  printf
 //#define debug _nodebug_ 
 
 void _nodebug_(const char *format,...){}
 
+/**
+ * PNG 里的 chunck 
+ * length chunck长度 
+ * type chunck类型
+ * data chunck内容
+ * crc crc校检值
+ */
 typedef struct _png_chunck 
 {
     uint32_t length;
-    char type[4];
-    char *data;
+    byte type[4];
+    byte *data;
     uint32_t crc;
     struct _png_chunck * next;
 }PNG_chunck;
 
+
 typedef struct _PNG
 {
-    char header[8];
+    byte header[8];
+    int width;
+    int height;
+    byte bit_depth;
     PNG_chunck * chuncks;
     uint32_t chunck_count;
 }PNG;
@@ -30,9 +46,9 @@ typedef struct _PNG
  * @ 内存长度 
  * return 小端内存段
  */
-char *to_litend(char *bytes, int size)
+byte *to_litend(byte *bytes, int size)
 {
-    char * li = (char *)malloc(size);
+    byte * li = (byte *)malloc(size);
     for (int i = 0; i< size ; i++) {
         li[i] = bytes[size-i-1];
     }
@@ -63,7 +79,7 @@ void png_read(PNG * png, const char * filename)
         fclose(png_filep);
         return;
     }
-    char png_tag[] = {0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
+    byte png_tag[] = {0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a};
     if (memcmp(png->header, png_tag, 8) != 0) {
         debug("not a png file.\n");
         fclose(png_filep);
@@ -87,7 +103,7 @@ void png_read(PNG * png, const char * filename)
         
         byte_count = fread((void*)temp_chunckp->type,4, 1, png_filep);
 
-        int length = *(int*)to_litend((char*)&temp_chunckp->length,4);
+        int length = *(int*)to_litend((byte*)&temp_chunckp->length,4);
 
         debug("length[%d] type[%s]\n",length, temp_chunckp->type);
         if (byte_count < 0) {
@@ -97,7 +113,7 @@ void png_read(PNG * png, const char * filename)
         }
         
         /* 读取chunck内容 */
-        temp_chunckp->data = (char *)malloc(length);
+        temp_chunckp->data = (byte *)malloc(length);
         byte_count = fread((void*)temp_chunckp->data, length, 1, png_filep);
         if (byte_count < 0 ) {
             debug("can't read chunck data.\n");
@@ -122,12 +138,27 @@ void png_read(PNG * png, const char * filename)
     fclose(png_filep);
 }
 
+
+void png_chunck_free(PNG_chunck * chunck)
+{
+    if (chunck == NULL) return;
+    png_chunck_free(chunck->next);
+    free(chunck->data);
+    free(chunck);
+    return;
+}
+void png_free(PNG *png)
+{
+    png_chunck_free(png->chuncks);
+}
+
 int main (int argc, char * argv[])
 {
     if (argc < 2) {
-        debug("no png file to read.\n");
+        printf("no png file to read.\n");
         return 0;
     }
     PNG png;
     png_read(&png, argv[1]);
+    png_free(&png);
 }
